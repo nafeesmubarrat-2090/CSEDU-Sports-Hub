@@ -1,26 +1,251 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* Color system — scoreboard graphite */
+  --color-bg: #14151A;
+  --color-surface: #1C1E26;
+  --color-surface-2: #232631;
+  --color-border: #2A2D3A;
+  --color-border-strong: #3A3E4D;
+
+  --color-primary: #F2B705;
+  --color-primary-strong: #FFC821;
+  --color-primary-soft: rgba(242, 183, 5, 0.12);
+
+  --color-secondary: #38BDF8;
+  --color-secondary-strong: #56CCF9;
+  --color-secondary-soft: rgba(56, 189, 248, 0.12);
+
+  --color-text: #F5F3EC;
+  --color-muted: #9CA3AF;
+
+  --color-success: #34D399;
+  --color-danger: #F87171;
+
+  /* Typography */
+  --font-sans: var(--font-sans), 'Inter', system-ui, sans-serif;
+  --font-display: var(--font-display), 'Barlow Condensed', sans-serif;
+  --font-mono: var(--font-mono), 'JetBrains Mono', monospace;
+
+  /* Shadows */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  --shadow-glow-amber: 0 0 0 1px rgba(242, 183, 5, 0.5), 0 0 18px -2px rgba(242, 183, 5, 0.35);
+  --shadow-glow-cyan: 0 0 0 1px rgba(56, 189, 248, 0.5), 0 0 18px -2px rgba(56, 189, 248, 0.35);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 15% -10%, rgba(242, 183, 5, 0.06), transparent 40%),
+    radial-gradient(circle at 85% 110%, rgba(56, 189, 248, 0.05), transparent 40%),
+    var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(242, 183, 5, 0.3);
+  color: #fff;
+}
+
+/* Headings use the display font */
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+/* Numeric / data readout — subtle amber glow like a scoreboard */
+.font-mono, .tabular-nums {
+  text-shadow: 0 0 8px rgba(242, 183, 5, 0.4);
+}
+
+/* Visible keyboard focus everywhere */
+:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Custom scrollbar to match the dark palette */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+}
+
+/* Reusable component classes */
+@layer components {
+  /* Card */
+  .card {
+    @apply rounded-lg border border-border bg-surface p-5 shadow-[var(--shadow-card)];
+  }
+  .card-hover {
+    @apply transition duration-200 hover:border-border-strong hover:-translate-y-0.5;
+  }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 bg-primary text-bg hover:bg-primary-strong hover:shadow-[var(--shadow-glow-amber)] focus-visible:outline-primary;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 border border-secondary/60 text-secondary hover:bg-secondary-soft hover:border-secondary focus-visible:outline-secondary;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 border border-border bg-surface-2 text-text hover:border-border-strong hover:text-primary;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 border border-danger/50 text-danger hover:bg-danger/10 focus-visible:outline-danger;
+  }
+  .btn-success {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 bg-success text-bg hover:brightness-110 focus-visible:outline-success;
+  }
+
+  /* Status pill badges */
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ring-1 ring-inset;
+  }
+  .badge-pending {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ring-1 ring-inset bg-primary/15 text-primary ring-primary/40;
+  }
+  .badge-approved {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ring-1 ring-inset bg-success/15 text-success ring-success/40;
+  }
+  .badge-rejected {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ring-1 ring-inset bg-danger/15 text-danger ring-danger/40;
+  }
+  .badge-completed {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ring-1 ring-inset bg-secondary/15 text-secondary ring-secondary/40;
+  }
+  .badge-live {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ring-1 ring-inset bg-danger/15 text-danger ring-danger/40;
+  }
+  .badge-neutral {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ring-1 ring-inset bg-surface-2 text-muted ring-border;
+  }
+
+  /* Lifecycle badges — real-world run state (upcoming/ongoing/completed/cancelled) */
+  .badge-upcoming {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ring-1 ring-inset bg-secondary/15 text-secondary ring-secondary/40;
+  }
+  .badge-ongoing {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ring-1 ring-inset bg-success/15 text-success ring-success/40;
+  }
+  .badge-finished {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ring-1 ring-inset bg-primary/15 text-primary ring-primary/40;
+  }
+  .badge-cancelled {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ring-1 ring-inset bg-danger/15 text-danger ring-danger/40;
+  }
+
+  /* Small pulsing dot for the "ongoing" (live) lifecycle badge */
+  .live-dot {
+    @apply inline-block h-1.5 w-1.5 rounded-full bg-success;
+    animation: live-pulse 1.6s ease-in-out infinite;
+  }
+
+  /* Form inputs */
+  .input {
+    @apply w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder:text-muted/70 transition focus:border-primary focus:ring-1 focus:ring-primary/40;
+  }
+  .label {
+    @apply block text-xs font-semibold uppercase tracking-wide text-muted;
+  }
+
+  /* Section header */
+  .section-title {
+    @apply text-lg font-bold uppercase tracking-wide text-text;
+  }
+  .page-title {
+    @apply font-display text-4xl font-extrabold tracking-tight text-text;
+  }
+  .breadcrumb {
+    @apply text-sm text-muted;
+  }
+  .breadcrumb a {
+    @apply text-secondary hover:text-secondary-strong hover:underline;
+  }
+
+  /* Empty state */
+  .empty-state {
+    @apply rounded-lg border border-dashed border-border-strong bg-surface/50 p-8 text-sm text-muted;
+  }
+
+  /* Bracket connector line that lights up amber when decided */
+  .bracket-connector {
+    @apply h-px w-6 bg-border-strong;
+  }
+  .bracket-connector-decided {
+    @apply bg-primary shadow-[0_0_8px_rgba(242,183,5,0.6)];
+  }
+
+  /* Event hero — gradient header on the event overview page */
+  .event-hero {
+    @apply relative overflow-hidden rounded-2xl border border-border bg-surface p-8 shadow-[var(--shadow-card)];
+    background:
+      radial-gradient(circle at 100% 0%, rgba(242, 183, 5, 0.14), transparent 55%),
+      radial-gradient(circle at 0% 100%, rgba(56, 189, 248, 0.12), transparent 55%),
+      var(--color-surface);
+  }
+
+  /* Champion card — celebratory winner block on the event page */
+  .champion-card {
+    @apply relative overflow-hidden rounded-2xl border border-primary/40 p-6 text-center shadow-[var(--shadow-glow-amber)];
+    background:
+      radial-gradient(circle at 50% -20%, rgba(242, 183, 5, 0.22), transparent 60%),
+      var(--color-surface);
+  }
+
+  /* Champion banner — slimmer, horizontal variant for the bracket page */
+  .champion-banner {
+    @apply relative flex items-center gap-4 overflow-hidden rounded-xl border border-primary/40 px-5 py-4 shadow-[var(--shadow-glow-amber)];
+    background:
+      linear-gradient(90deg, rgba(242, 183, 5, 0.16), transparent 70%),
+      var(--color-surface);
+  }
+
+  /* Runner-up card — silver companion to .champion-card for the finalist who lost */
+  .runnerup-card {
+    @apply relative overflow-hidden rounded-2xl border border-slate-400/40 p-6 text-center shadow-[0_0_24px_rgba(148,163,184,0.18)];
+    background:
+      radial-gradient(circle at 50% -20%, rgba(203, 213, 225, 0.18), transparent 60%),
+      var(--color-surface);
+  }
+
+  /* Award card — one manager-curated recognition (category + performer) */
+  .award-card {
+    @apply relative overflow-hidden rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow-card)] transition-colors;
+    background:
+      radial-gradient(circle at 100% 0%, rgba(242, 183, 5, 0.08), transparent 55%),
+      var(--color-surface);
+  }
+  .award-card:hover {
+    @apply border-primary/40;
+  }
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
 }

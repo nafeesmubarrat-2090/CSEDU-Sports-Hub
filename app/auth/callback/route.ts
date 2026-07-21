@@ -7,17 +7,14 @@ export async function GET(request: Request) {
   const next = requestUrl.searchParams.get('next')
   const safeNext = next?.startsWith('/') ? next : '/dashboard'
 
-  console.log('Callback hit. Code:', code ? 'present' : 'missing')
-  console.log('Full URL:', request.url)
-
   if (code) {
     const supabase = await createClient()
     const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-    console.log('Exchange error:', error)
-    console.log('Exchange data:', data)
     if (!error) {
+      console.log('Auth callback: session established for user', data.user?.id)
       return NextResponse.redirect(new URL(safeNext, requestUrl.origin))
     }
+    console.error('Auth callback: code exchange failed:', error.message)
   }
 
   return NextResponse.redirect(new URL('/login', requestUrl.origin))

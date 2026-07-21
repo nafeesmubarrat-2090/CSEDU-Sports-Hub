@@ -34,11 +34,11 @@ export default async function DashboardPage() {
     redirect('/login')
   }
 
-  const [{ data: createdEvents = [], error: createdEventsError }, { data: memberships = [], error: membershipsError }] = await Promise.all([
+  const [{ data: managedRows = [], error: managedError }, { data: memberships = [], error: membershipsError }] = await Promise.all([
     supabase
-      .from('events')
-      .select('id, name, sport, status, start_date, end_date')
-      .eq('created_by', user.id)
+      .from('event_managers')
+      .select('event_id')
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false }),
     supabase
       .from('team_members')
@@ -47,12 +47,29 @@ export default async function DashboardPage() {
       .order('created_at', { ascending: false }),
   ])
 
-  if (createdEventsError) {
-    throw new Error(createdEventsError.message)
+  if (managedError) {
+    throw new Error(managedError.message)
   }
 
   if (membershipsError) {
     throw new Error(membershipsError.message)
+  }
+
+  const managedEventIds = Array.from(
+    new Set(((managedRows ?? []) as { event_id: string }[]).map((row) => row.event_id)),
+  )
+
+  const { data: managedEvents = [], error: managedEventsError } =
+    managedEventIds.length > 0
+      ? await supabase
+          .from('events')
+          .select('id, name, sport, status, start_date, end_date')
+          .in('id', managedEventIds)
+          .order('created_at', { ascending: false })
+      : { data: [] as EventRow[], error: null }
+
+  if (managedEventsError) {
+    throw new Error(managedEventsError.message)
   }
 
   const membershipsList = (memberships ?? []) as TeamMembershipRow[]
@@ -82,7 +99,7 @@ export default async function DashboardPage() {
     throw new Error(teamEventsError.message)
   }
 
-  const createdEventsList = (createdEvents ?? []) as EventRow[]
+  const managedEventsList = (managedEvents ?? []) as EventRow[]
   const teamEventsList = (teamEvents ?? []) as EventRow[]
   const teamEventMap = new Map(teamEventsList.map((event) => [event.id, event]))
   const teamMap = new Map(teamsList.map((team) => [team.id, team]))
@@ -91,71 +108,71 @@ export default async function DashboardPage() {
     <main className="mx-auto w-full max-w-6xl px-6 py-12 sm:px-8 lg:px-10">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold text-slate-950">Dashboard</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Your created events and the teams you are part of.
+          <h1 className="page-title">Dashboard</h1>
+          <p className="mt-2 text-sm text-muted">
+            The events you manage and the teams you are part of.
           </p>
         </div>
 
         <div className="flex gap-3">
-          <Link
-            href="/events"
-            className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-          >
+          <Link href="/events" className="btn-secondary">
             View events
           </Link>
-          <Link
-            href="/events/new"
-            className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
-          >
+          <Link href="/events/new" className="btn-primary">
             Propose event
           </Link>
         </div>
       </div>
 
       <section className="mt-10">
-        <h2 className="text-lg font-semibold text-slate-900">Events you created</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="section-title">Events you manage</h2>
+          <span className="font-mono text-sm text-muted">{managedEventsList.length} event{managedEventsList.length !== 1 ? 's' : ''}</span>
+        </div>
 
-        {createdEventsList.length > 0 ? (
+        {managedEventsList.length > 0 ? (
           <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {createdEventsList.map((event) => (
-              <article key={event.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            {managedEventsList.map((event) => (
+              <article key={event.id} className="card card-hover">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h3 className="text-lg font-semibold text-slate-900">{event.name}</h3>
-                    <p className="mt-1 text-sm text-slate-600">{event.sport ?? 'Sport TBD'}</p>
+                    <h3 className="font-display text-lg font-bold text-text">{event.name}</h3>
+                    <p className="mt-1 text-sm text-muted">{event.sport ?? 'Sport TBD'}</p>
                   </div>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                  <span className={event.status === 'approved' ? 'badge-approved' : event.status === 'pending' ? 'badge-pending' : event.status === 'rejected' ? 'badge-rejected' : 'badge-neutral'}>
                     {event.status}
                   </span>
                 </div>
 
-                <dl className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-600">
+                <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <dt className="text-xs uppercase tracking-wide text-slate-400">Starts</dt>
-                    <dd className="mt-1 text-slate-900">{formatDate(event.start_date)}</dd>
+                    <dt className="label">Starts</dt>
+                    <dd className="mt-1 font-mono text-text">{formatDate(event.start_date)}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs uppercase tracking-wide text-slate-400">Ends</dt>
-                    <dd className="mt-1 text-slate-900">{formatDate(event.end_date)}</dd>
+                    <dt className="label">Ends</dt>
+                    <dd className="mt-1 font-mono text-text">{formatDate(event.end_date)}</dd>
                   </div>
                 </dl>
 
-                <Link href={`/events/${event.id}`} className="mt-5 inline-flex text-sm font-medium text-slate-900 underline-offset-4 hover:underline">
+                <Link href={`/events/${event.id}`} className="mt-5 inline-flex text-sm font-semibold text-secondary underline-offset-4 hover:text-secondary-strong hover:underline">
                   Open event
                 </Link>
               </article>
             ))}
           </div>
         ) : (
-          <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-sm text-slate-600">
-            You have not created any events yet.
+          <div className="mt-4 empty-state">
+            You are not managing any events yet.
           </div>
         )}
       </section>
 
       <section className="mt-12">
-        <h2 className="text-lg font-semibold text-slate-900">Teams you are on</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="section-title">Teams you are on</h2>
+          <span className="font-mono text-sm text-muted">{membershipsList.length} team{membershipsList.length !== 1 ? 's' : ''}</span>
+        </div>
 
         {membershipsList.length > 0 ? (
           <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -164,22 +181,22 @@ export default async function DashboardPage() {
               const teamEvent = team ? teamEventMap.get(team.event_id) : undefined
 
               return (
-                <article key={membership.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <article key={membership.id} className="card card-hover">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <h3 className="text-lg font-semibold text-slate-900">{team?.name ?? 'Team'}</h3>
-                      <p className="mt-1 text-sm text-slate-600">
+                      <h3 className="font-display text-lg font-bold text-text">{team?.name ?? 'Team'}</h3>
+                      <p className="mt-1 text-sm text-muted">
                         {teamEvent?.name ?? 'Event unavailable'}
                       </p>
                     </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                    <span className={membership.role === 'manager' ? 'badge-approved' : 'badge-neutral'}>
                       {membership.role}
                     </span>
                   </div>
 
                   <Link
                     href={team ? `/events/${team.event_id}/teams/${team.id}` : '/events'}
-                    className="mt-5 inline-flex text-sm font-medium text-slate-900 underline-offset-4 hover:underline"
+                    className="mt-5 inline-flex text-sm font-semibold text-secondary underline-offset-4 hover:text-secondary-strong hover:underline"
                   >
                     Open team
                   </Link>
@@ -188,7 +205,7 @@ export default async function DashboardPage() {
             })}
           </div>
         ) : (
-          <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-sm text-slate-600">
+          <div className="mt-4 empty-state">
             You are not on any teams yet.
           </div>
         )}

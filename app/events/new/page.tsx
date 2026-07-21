@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import type { Database } from '@/lib/types/database.types'
 
@@ -68,63 +69,68 @@ export default async function NewEventPage({
 
   return (
     <main className="mx-auto w-full max-w-2xl px-6 py-12 sm:px-8 lg:px-10">
-      <h1 className="text-3xl font-semibold text-slate-950">Propose an event</h1>
-      <p className="mt-2 text-sm text-slate-600">
+      <p className="breadcrumb">
+        <Link href="/events">Events</Link>
+        {' / '}
+        <span className="text-text">Propose</span>
+      </p>
+      <h1 className="mt-2 page-title">Propose an event</h1>
+      <p className="mt-2 text-sm text-muted">
         Submit a proposal for admin review. Approved events become visible publicly.
       </p>
 
       {query.submitted ? (
-        <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+        <div className="mt-6 rounded-lg border border-success/40 bg-success/10 px-4 py-3 text-sm text-success">
           Pending admin approval
         </div>
       ) : null}
 
       {query.error ? (
-        <div className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+        <div className="mt-6 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
           {query.error}
         </div>
       ) : null}
 
-      <form action={createEvent} className="mt-8 space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <form action={createEvent} className="mt-8 card space-y-5">
         <div>
-          <label htmlFor="name" className="text-sm font-medium text-slate-700">
+          <label htmlFor="name" className="label">
             Event name
           </label>
           <input
             id="name"
             name="name"
             required
-            className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+            className="input mt-2"
           />
         </div>
 
         <div>
-          <label htmlFor="sport" className="text-sm font-medium text-slate-700">
+          <label htmlFor="sport" className="label">
             Sport
           </label>
           <input
             id="sport"
             name="sport"
             required
-            className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+            className="input mt-2"
           />
         </div>
 
         <div>
-          <label htmlFor="description" className="text-sm font-medium text-slate-700">
+          <label htmlFor="description" className="label">
             Description
           </label>
           <textarea
             id="description"
             name="description"
             rows={5}
-            className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+            className="input mt-2"
           />
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
-            <label htmlFor="start_date" className="text-sm font-medium text-slate-700">
+            <label htmlFor="start_date" className="label">
               Start date
             </label>
             <input
@@ -132,12 +138,12 @@ export default async function NewEventPage({
               name="start_date"
               type="date"
               required
-              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+              className="input mt-2"
             />
           </div>
 
           <div>
-            <label htmlFor="end_date" className="text-sm font-medium text-slate-700">
+            <label htmlFor="end_date" className="label">
               End date
             </label>
             <input
@@ -145,15 +151,12 @@ export default async function NewEventPage({
               name="end_date"
               type="date"
               required
-              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+              className="input mt-2"
             />
           </div>
         </div>
 
-        <button
-          type="submit"
-          className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
-        >
+        <button type="submit" className="btn-primary">
           Submit proposal
         </button>
       </form>

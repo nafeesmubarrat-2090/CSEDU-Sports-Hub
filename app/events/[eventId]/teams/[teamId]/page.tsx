@@ -11,11 +11,11 @@ type TeamMemberSummary = Pick<
 >
 type ProfileSummary = Pick<
   Database['public']['Tables']['profiles']['Row'],
-  'id' | 'full_name' | 'email' | 'avatar_url' | 'global_role'
+  'id' | 'full_name' | 'email' | 'avatar_url' | 'global_role' | 'username'
 >
 
 type SearchParams = Promise<{
-  email?: string
+  q?: string
   error?: string
   success?: string
 }>
@@ -88,13 +88,13 @@ export default async function TeamDashboardPage({ params, searchParams }: PagePr
       rosterUserIds.length > 0
         ? supabase
             .from('profiles')
-            .select('id, full_name, email, avatar_url, global_role')
+            .select('id, full_name, email, avatar_url, global_role, username')
             .in('id', rosterUserIds)
         : Promise.resolve({ data: [] as ProfileSummary[], error: null }),
       user
         ? supabase
             .from('profiles')
-            .select('id, full_name, email, avatar_url, global_role')
+            .select('id, full_name, email, avatar_url, global_role, username')
             .eq('id', user.id)
             .maybeSingle()
         : Promise.resolve({ data: null, error: null }),
@@ -142,10 +142,10 @@ export default async function TeamDashboardPage({ params, searchParams }: PagePr
     }
 
     const userId = String(formData.get('user_id') ?? '').trim()
-    const email = String(formData.get('email') ?? '').trim()
+    const q = String(formData.get('q') ?? '').trim()
 
     if (!userId) {
-      redirect(`/events/${eventId}/teams/${teamId}?email=${encodeURIComponent(email)}&error=${encodeURIComponent('Select a player to add')}`)
+      redirect(`/events/${eventId}/teams/${teamId}?q=${encodeURIComponent(q)}&error=${encodeURIComponent('Select a player to add')}`)
     }
 
     const { data: existingMembership, error: existingMembershipError } = await supabase
@@ -157,16 +157,16 @@ export default async function TeamDashboardPage({ params, searchParams }: PagePr
 
     if (existingMembershipError) {
       redirect(
-        `/events/${eventId}/teams/${teamId}?email=${encodeURIComponent(email)}&error=${encodeURIComponent(existingMembershipError.message)}`
+        `/events/${eventId}/teams/${teamId}?q=${encodeURIComponent(q)}&error=${encodeURIComponent(existingMembershipError.message)}`
       )
     }
 
     if (existingMembership?.role === 'manager') {
-      redirect(`/events/${eventId}/teams/${teamId}?email=${encodeURIComponent(email)}&success=manager-already-listed`)
+      redirect(`/events/${eventId}/teams/${teamId}?q=${encodeURIComponent(q)}&success=manager-already-listed`)
     }
 
     if (existingMembership) {
-      redirect(`/events/${eventId}/teams/${teamId}?email=${encodeURIComponent(email)}&error=${encodeURIComponent('This player is already on the team')}`)
+      redirect(`/events/${eventId}/teams/${teamId}?q=${encodeURIComponent(q)}&error=${encodeURIComponent('This player is already on the team')}`)
     }
 
     const { error } = await supabase.from('team_members').insert({
@@ -178,11 +178,11 @@ export default async function TeamDashboardPage({ params, searchParams }: PagePr
 
     if (error) {
       redirect(
-        `/events/${eventId}/teams/${teamId}?email=${encodeURIComponent(email)}&error=${encodeURIComponent(error.message)}`
+        `/events/${eventId}/teams/${teamId}?q=${encodeURIComponent(q)}&error=${encodeURIComponent(error.message)}`
       )
     }
 
-    redirect(`/events/${eventId}/teams/${teamId}?email=${encodeURIComponent(email)}&success=player-added`)
+    redirect(`/events/${eventId}/teams/${teamId}?q=${encodeURIComponent(q)}&success=player-added`)
   }
 
   async function removePlayer(formData: FormData) {
@@ -212,20 +212,23 @@ export default async function TeamDashboardPage({ params, searchParams }: PagePr
     redirect(`/events/${eventId}/teams/${teamId}?success=player-removed`)
   }
 
-  const searchEmail = query.email?.trim() ?? ''
-  const searchResult = searchEmail && canManage
+  const searchTerm = query.q?.trim() ?? ''
+  // Escape LIKE wildcards in user input so `%` / `_` are matched literally.
+  const escapedTerm = searchTerm.replace(/[\\%_]/g, (ch) => `\\${ch}`)
+  const searchResult = searchTerm && canManage
     ? await supabase
         .from('profiles')
-        .select('id, full_name, email, avatar_url, global_role')
-        .eq('email', searchEmail)
-        .maybeSingle()
-    : { data: null as ProfileSummary | null, error: null }
+        .select('id, full_name, email, avatar_url, global_role, username')
+        .or(`email.ilike.%${escapedTerm}%,username.ilike.%${escapedTerm}%`)
+        .order('username', { ascending: true })
+        .limit(10)
+    : { data: [] as ProfileSummary[], error: null }
 
   if (searchResult.error) {
     throw new Error(searchResult.error.message)
   }
 
-  const searchedProfile = searchResult.data
+  const searchMatches = (searchResult.data ?? []) as ProfileSummary[]
   const rosterProfileList = rosterRows.map((member) => ({
     member,
     profile: profileMap.get(member.user_id),
@@ -240,28 +243,27 @@ export default async function TeamDashboardPage({ params, searchParams }: PagePr
     <main className="mx-auto w-full max-w-6xl px-6 py-12 sm:px-8 lg:px-10">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm text-slate-500">
-            <Link href={`/events/${eventId}/teams`} className="hover:underline">
-              {event.name}
-            </Link>{' '}
-            / Teams / Team dashboard
+          <p className="breadcrumb">
+            <Link href={`/events/${eventId}/teams`}>{event.name}</Link>
+            {' / '}
+            <span className="text-text">Teams / Team dashboard</span>
           </p>
-          <h1 className="mt-2 text-3xl font-semibold text-slate-950">{team.name}</h1>
+          <h1 className="mt-2 page-title">{team.name}</h1>
         </div>
 
-        <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-slate-100 text-sm font-semibold text-slate-700">
+        <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg border border-border bg-surface-2 font-display text-base font-bold uppercase text-primary">
           <TeamLogo name={team.name} logoUrl={team.logo_url} />
         </div>
       </div>
 
       {query.error ? (
-        <div className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+        <div className="mt-6 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
           {query.error}
         </div>
       ) : null}
 
       {query.success ? (
-        <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+        <div className="mt-6 rounded-lg border border-success/40 bg-success/10 px-4 py-3 text-sm text-success">
           {query.success === 'player-added'
             ? 'Player added successfully.'
             : query.success === 'manager-already-listed'
@@ -271,54 +273,64 @@ export default async function TeamDashboardPage({ params, searchParams }: PagePr
       ) : null}
 
       {canManage ? (
-        <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Add player</h2>
-          <p className="mt-1 text-sm text-slate-600">Search by email and add the matching user to this roster.</p>
+        <section className="mt-8 card">
+          <h2 className="section-title">Add player</h2>
+          <p className="mt-1 text-sm text-muted">Search by email or username, then add the matching user to this roster.</p>
 
           <form method="get" className="mt-4 flex flex-col gap-3 sm:flex-row">
             <input
-              type="email"
-              name="email"
-              defaultValue={searchEmail}
-              placeholder="player@example.com"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+              type="text"
+              name="q"
+              defaultValue={searchTerm}
+              placeholder="email or username"
+              className="input"
             />
             <button
               type="submit"
-              className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              className="btn-secondary whitespace-nowrap"
             >
               Search
             </button>
           </form>
 
-          {searchEmail ? (
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              {searchedProfile ? (
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="font-medium text-slate-950">{searchedProfile.full_name}</p>
-                    <p className="text-sm text-slate-600">{searchedProfile.email}</p>
-                  </div>
+          {searchTerm ? (
+            searchMatches.length > 0 ? (
+              <ul className="mt-4 flex flex-col gap-2">
+                {searchMatches.map((match) => (
+                  <li
+                    key={match.id}
+                    className="flex flex-col gap-3 rounded-lg border border-border bg-surface-2 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-semibold text-text">
+                        {match.full_name}{' '}
+                        <span className="font-mono text-sm font-normal text-muted">@{match.username}</span>
+                      </p>
+                      <p className="truncate text-sm text-muted">{match.email}</p>
+                    </div>
 
-                  {rosterPlayerUserIdSet.has(searchedProfile.id) ? (
-                    <span className="text-sm font-medium text-slate-600">Already on this team</span>
-                  ) : (
-                    <form action={addPlayer}>
-                      <input type="hidden" name="user_id" value={searchedProfile.id} />
-                      <input type="hidden" name="email" value={searchedProfile.email} />
-                      <button
-                        type="submit"
-                        className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
-                      >
-                        Add player
-                      </button>
-                    </form>
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm text-slate-600">No user was found with that email address.</p>
-              )}
-            </div>
+                    {rosterPlayerUserIdSet.has(match.id) ? (
+                      <span className="text-sm font-medium text-muted">Already on this team</span>
+                    ) : (
+                      <form action={addPlayer}>
+                        <input type="hidden" name="user_id" value={match.id} />
+                        <input type="hidden" name="q" value={searchTerm} />
+                        <button
+                          type="submit"
+                          className="btn-primary whitespace-nowrap"
+                        >
+                          Add player
+                        </button>
+                      </form>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="mt-4 rounded-lg border border-border bg-surface-2 p-4">
+                <p className="text-sm text-muted">No user was found matching that email or username.</p>
+              </div>
+            )
           ) : null}
 
           {/* self-add removed: managers should not add themselves via UI to avoid duplicate display */}
@@ -326,31 +338,31 @@ export default async function TeamDashboardPage({ params, searchParams }: PagePr
       ) : null}
 
       {/* MINIMAL CHANGE: Manager Section */}
-      <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="mt-8 card">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-slate-900">Manager</h2>
-          <span className="text-sm text-slate-500">{managerList.length} member{managerList.length !== 1 ? 's' : ''}</span>
+          <h2 className="section-title">Manager</h2>
+          <span className="font-mono text-sm text-muted">{managerList.length} member{managerList.length !== 1 ? 's' : ''}</span>
         </div>
 
         {managerList.length > 0 ? (
-          <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
-            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <div className="mt-4 overflow-hidden rounded-lg border border-border">
+            <table className="min-w-full divide-y divide-border text-left text-sm">
+              <thead className="bg-surface-2 text-xs uppercase tracking-wide text-muted">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Manager</th>
-                  <th className="px-4 py-3 font-medium">Jersey</th>
-                  <th className="px-4 py-3 font-medium">Position</th>
+                  <th className="px-4 py-3 font-semibold">Manager</th>
+                  <th className="px-4 py-3 font-semibold">Jersey</th>
+                  <th className="px-4 py-3 font-semibold">Position</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
+              <tbody className="divide-y divide-border bg-surface">
                 {managerList.map(({ member, profile }) => (
                   <tr key={member.id}>
                     <td className="px-4 py-4">
-                      <div className="font-medium text-slate-950">{profile?.full_name ?? 'Unknown manager'}</div>
-                      <div className="text-xs text-slate-500">{profile?.email ?? 'No email available'}</div>
+                      <div className="font-semibold text-text">{profile?.full_name ?? 'Unknown manager'}</div>
+                      <div className="text-xs text-muted">{profile?.email ?? 'No email available'}</div>
                     </td>
-                    <td className="px-4 py-4 text-slate-700">{member.jersey_number ?? '—'}</td>
-                    <td className="px-4 py-4 text-slate-700">{member.position ?? '—'}</td>
+                    <td className="px-4 py-4 font-mono text-text">{member.jersey_number ?? '—'}</td>
+                    <td className="px-4 py-4 text-text">{member.position ?? '—'}</td>
                     {/* Manager cannot be removed from the UI; removal disabled intentionally */}
                   </tr>
                 ))}
@@ -358,46 +370,46 @@ export default async function TeamDashboardPage({ params, searchParams }: PagePr
             </table>
           </div>
         ) : (
-          <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-sm text-slate-600">
+          <div className="mt-4 empty-state">
             No manager assigned.
           </div>
         )}
       </section>
 
       {/* MINIMAL CHANGE: Players Section */}
-      <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="mt-8 card">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-slate-900">Players</h2>
-          <span className="text-sm text-slate-500">{playerList.length} member{playerList.length !== 1 ? 's' : ''}</span>
+          <h2 className="section-title">Players</h2>
+          <span className="font-mono text-sm text-muted">{playerList.length} member{playerList.length !== 1 ? 's' : ''}</span>
         </div>
 
         {playerList.length > 0 ? (
-          <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
-            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <div className="mt-4 overflow-hidden rounded-lg border border-border">
+            <table className="min-w-full divide-y divide-border text-left text-sm">
+              <thead className="bg-surface-2 text-xs uppercase tracking-wide text-muted">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Player</th>
-                  <th className="px-4 py-3 font-medium">Jersey</th>
-                  <th className="px-4 py-3 font-medium">Position</th>
-                  {canManage ? <th className="px-4 py-3 font-medium">Actions</th> : null}
+                  <th className="px-4 py-3 font-semibold">Player</th>
+                  <th className="px-4 py-3 font-semibold">Jersey</th>
+                  <th className="px-4 py-3 font-semibold">Position</th>
+                  {canManage ? <th className="px-4 py-3 font-semibold">Actions</th> : null}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
+              <tbody className="divide-y divide-border bg-surface">
                 {playerList.map(({ member, profile }) => (
                   <tr key={member.id}>
                     <td className="px-4 py-4">
-                      <div className="font-medium text-slate-950">{profile?.full_name ?? 'Unknown player'}</div>
-                      <div className="text-xs text-slate-500">{profile?.email ?? 'No email available'}</div>
+                      <div className="font-semibold text-text">{profile?.full_name ?? 'Unknown player'}</div>
+                      <div className="text-xs text-muted">{profile?.email ?? 'No email available'}</div>
                     </td>
-                    <td className="px-4 py-4 text-slate-700">{member.jersey_number ?? '—'}</td>
-                    <td className="px-4 py-4 text-slate-700">{member.position ?? '—'}</td>
+                    <td className="px-4 py-4 font-mono text-text">{member.jersey_number ?? '—'}</td>
+                    <td className="px-4 py-4 text-text">{member.position ?? '—'}</td>
                     {canManage ? (
                       <td className="px-4 py-4">
                         <form action={removePlayer}>
                           <input type="hidden" name="member_id" value={member.id} />
                           <button
                             type="submit"
-                            className="inline-flex items-center justify-center rounded-lg border border-rose-300 px-3 py-2 text-xs font-medium text-rose-700 transition hover:bg-rose-50"
+                            className="btn-danger"
                           >
                             Remove
                           </button>
@@ -410,7 +422,7 @@ export default async function TeamDashboardPage({ params, searchParams }: PagePr
             </table>
           </div>
         ) : (
-          <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-sm text-slate-600">
+          <div className="mt-4 empty-state">
             This roster is empty.
           </div>
         )}

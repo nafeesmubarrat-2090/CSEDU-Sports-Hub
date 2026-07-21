@@ -59,12 +59,7 @@ export default async function ActivityPage({ params }: PageProps) {
       .eq('event_id', eventId)
       .order('created_at', { ascending: false }),
   ])
-
-console.log('audit error:', auditError)
-console.log('audit data:', audit)
-console.log('event error:', eventError)
-console.log('event data:', event)
-
+  
   if (eventError) throw new Error(eventError.message)
   if (auditError) throw new Error(auditError.message)
   if (!event) return redirect('/events')
@@ -84,29 +79,37 @@ console.log('event data:', event)
     <main className="mx-auto w-full max-w-4xl px-6 py-12 sm:px-8 lg:px-10">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-slate-500">
-            <Link href={`/events/${eventId}`} className="hover:underline">
-              {event.name}
-            </Link>{' '}
-            / Activity
+          <p className="breadcrumb">
+            <Link href={`/events/${eventId}`}>{event.name}</Link>
+            {' / '}
+            <span className="text-text">Activity</span>
           </p>
-          <h1 className="mt-2 text-3xl font-semibold text-slate-950">Activity log</h1>
+          <h1 className="mt-2 page-title">Activity log</h1>
+          <p className="mt-2 text-sm text-muted">Audit trail of changes made to this event.</p>
         </div>
       </div>
 
-      <section className="mt-8">
+      <section className="mt-8 card">
+        <div className="flex items-center justify-between">
+          <h2 className="section-title">Recent activity</h2>
+          <span className="font-mono text-sm text-muted">{auditRows.length} event{auditRows.length !== 1 ? 's' : ''}</span>
+        </div>
+
         {auditRows.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-sm text-slate-600">No activity yet.</div>
+          <div className="mt-4 empty-state">No activity yet.</div>
         ) : (
-          <ul className="mt-4 divide-y divide-slate-200">
+          <ul className="mt-4 divide-y divide-border">
             {auditRows.map((row) => (
               <li key={row.id} className="py-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="text-sm font-medium text-slate-900">{userMap.get((row as any).actor_id ?? (row as any).actor_id)?.full_name ?? 'Unknown'}</div>
-                    <div className="mt-1 text-sm text-slate-600">{formatActivity(row.action, row.table_name)}</div>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-primary shadow-[0_0_8px_rgba(242,183,5,0.6)]" />
+                    <div>
+                      <div className="text-sm font-semibold text-text">{userMap.get((row as any).actor_id ?? (row as any).actor_id)?.full_name ?? 'Unknown'}</div>
+                      <div className="mt-1 text-sm text-muted">{formatActivity(row.action, row.table_name)}</div>
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-400">{relativeTime(row.created_at)}</div>
+                  <div className="font-mono text-xs text-muted">{relativeTime(row.created_at)}</div>
                 </div>
               </li>
             ))}

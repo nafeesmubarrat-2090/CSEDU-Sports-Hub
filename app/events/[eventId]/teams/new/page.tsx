@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import type { Database } from '@/lib/types/database.types'
@@ -74,36 +75,35 @@ export default async function NewTeamPage({ params, searchParams }: PageProps) {
 
   return (
     <main className="mx-auto w-full max-w-2xl px-6 py-12 sm:px-8 lg:px-10">
-      <p className="text-sm text-slate-500">
-        <span className="hover:underline">{event.name}</span> / Create team
+      <p className="breadcrumb">
+        <Link href={`/events/${eventId}`}>{event.name}</Link>
+        {' / '}
+        <span className="text-text">Create team</span>
       </p>
-      <h1 className="mt-2 text-3xl font-semibold text-slate-950">Create a team</h1>
-      <p className="mt-2 text-sm text-slate-600">
+      <h1 className="mt-2 page-title">Create a team</h1>
+      <p className="mt-2 text-sm text-muted">
         You will be added to the team immediately as its manager.
       </p>
 
       {query.error ? (
-        <div className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+        <div className="mt-6 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
           {query.error}
         </div>
       ) : null}
 
-      <form action={createTeam} className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <label htmlFor="name" className="text-sm font-medium text-slate-700">
+      <form action={createTeam} className="mt-8 card">
+        <label htmlFor="name" className="label">
           Team name
         </label>
         <input
           id="name"
           name="name"
           required
-          className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+          className="input mt-2"
           placeholder="E.g. Red Hawks"
         />
 
-        <button
-          type="submit"
-          className="mt-5 inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
-        >
+        <button type="submit" className="btn-primary mt-5">
           Create team
         </button>
       </form>

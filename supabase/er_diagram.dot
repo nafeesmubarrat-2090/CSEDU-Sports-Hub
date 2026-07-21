@@ -1,0 +1,172 @@
+digraph ER {
+  graph [
+    rankdir=LR,
+    bgcolor="white",
+    splines=polyline,
+    nodesep=0.6,
+    ranksep=1.1,
+    pad=0.4,
+    fontname="Helvetica",
+    label=<<FONT POINT-SIZE="20"><B>CSE DU Sports Event Management &mdash; ER Diagram</B></FONT>>,
+    labelloc="t"
+  ];
+  node [shape=plaintext, fontname="Helvetica"];
+  edge [color="#5b6b7b", arrowhead=normal, arrowtail=none, penwidth=1.2];
+
+  /* ---------- helpers ----------
+     PK rows shaded gold, FK rows shaded blue, header shaded dark. */
+
+  profiles [label=<
+    <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD BGCOLOR="#2d3e50" COLSPAN="2"><FONT COLOR="white"><B>profiles</B></FONT></TD></TR>
+      <TR><TD BGCOLOR="#fcf3cf" ALIGN="LEFT"><B>id</B> (PK)</TD><TD BGCOLOR="#fcf3cf" ALIGN="LEFT">uuid &rarr; auth.users</TD></TR>
+      <TR><TD ALIGN="LEFT">full_name</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD ALIGN="LEFT">email</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD ALIGN="LEFT">username</TD><TD ALIGN="LEFT">text UNIQUE</TD></TR>
+      <TR><TD ALIGN="LEFT">avatar_url</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD ALIGN="LEFT">global_role</TD><TD ALIGN="LEFT">app_role</TD></TR>
+      <TR><TD ALIGN="LEFT">created_at</TD><TD ALIGN="LEFT">timestamptz</TD></TR>
+    </TABLE>>];
+
+  events [label=<
+    <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD BGCOLOR="#2d3e50" COLSPAN="2"><FONT COLOR="white"><B>events</B></FONT></TD></TR>
+      <TR><TD BGCOLOR="#fcf3cf" ALIGN="LEFT"><B>id</B> (PK)</TD><TD BGCOLOR="#fcf3cf" ALIGN="LEFT">uuid</TD></TR>
+      <TR><TD ALIGN="LEFT">name</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD ALIGN="LEFT">description</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD ALIGN="LEFT">sport</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD ALIGN="LEFT">status</TD><TD ALIGN="LEFT">event_status</TD></TR>
+      <TR><TD ALIGN="LEFT">lifecycle</TD><TD ALIGN="LEFT">event_lifecycle</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">created_by (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; profiles</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">approved_by (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; profiles</TD></TR>
+      <TR><TD ALIGN="LEFT">start_date / end_date</TD><TD ALIGN="LEFT">date</TD></TR>
+      <TR><TD ALIGN="LEFT">cover_image_url</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD ALIGN="LEFT">created_at / updated_at</TD><TD ALIGN="LEFT">timestamptz</TD></TR>
+    </TABLE>>];
+
+  event_managers [label=<
+    <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD BGCOLOR="#2d3e50" COLSPAN="2"><FONT COLOR="white"><B>event_managers</B></FONT></TD></TR>
+      <TR><TD BGCOLOR="#fcf3cf" ALIGN="LEFT"><B>event_id</B> (PK,FK)</TD><TD BGCOLOR="#fcf3cf" ALIGN="LEFT">uuid &rarr; events</TD></TR>
+      <TR><TD BGCOLOR="#fcf3cf" ALIGN="LEFT"><B>user_id</B> (PK,FK)</TD><TD BGCOLOR="#fcf3cf" ALIGN="LEFT">uuid &rarr; profiles</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">assigned_by (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; profiles</TD></TR>
+      <TR><TD ALIGN="LEFT">created_at</TD><TD ALIGN="LEFT">timestamptz</TD></TR>
+    </TABLE>>];
+
+  teams [label=<
+    <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD BGCOLOR="#2d3e50" COLSPAN="2"><FONT COLOR="white"><B>teams</B></FONT></TD></TR>
+      <TR><TD BGCOLOR="#fcf3cf" ALIGN="LEFT"><B>id</B> (PK)</TD><TD BGCOLOR="#fcf3cf" ALIGN="LEFT">uuid</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">event_id (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; events</TD></TR>
+      <TR><TD ALIGN="LEFT">name</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD ALIGN="LEFT">logo_url</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">created_by (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; profiles</TD></TR>
+      <TR><TD ALIGN="LEFT">created_at</TD><TD ALIGN="LEFT">timestamptz</TD></TR>
+    </TABLE>>];
+
+  team_members [label=<
+    <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD BGCOLOR="#2d3e50" COLSPAN="2"><FONT COLOR="white"><B>team_members</B></FONT></TD></TR>
+      <TR><TD BGCOLOR="#fcf3cf" ALIGN="LEFT"><B>id</B> (PK)</TD><TD BGCOLOR="#fcf3cf" ALIGN="LEFT">uuid</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">team_id (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; teams</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">user_id (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; profiles</TD></TR>
+      <TR><TD ALIGN="LEFT">role</TD><TD ALIGN="LEFT">team_member_role</TD></TR>
+      <TR><TD ALIGN="LEFT">jersey_number</TD><TD ALIGN="LEFT">int</TD></TR>
+      <TR><TD ALIGN="LEFT">position</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">added_by (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; profiles</TD></TR>
+      <TR><TD ALIGN="LEFT">created_at</TD><TD ALIGN="LEFT">timestamptz</TD></TR>
+      <TR><TD ALIGN="LEFT" COLSPAN="2"><I>UNIQUE (team_id, user_id)</I></TD></TR>
+    </TABLE>>];
+
+  matches [label=<
+    <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD BGCOLOR="#2d3e50" COLSPAN="2"><FONT COLOR="white"><B>matches</B></FONT></TD></TR>
+      <TR><TD BGCOLOR="#fcf3cf" ALIGN="LEFT"><B>id</B> (PK)</TD><TD BGCOLOR="#fcf3cf" ALIGN="LEFT">uuid</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">event_id (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; events</TD></TR>
+      <TR><TD ALIGN="LEFT">round / match_number</TD><TD ALIGN="LEFT">int</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">team_a_id (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; teams</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">team_b_id (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; teams</TD></TR>
+      <TR><TD ALIGN="LEFT">team_a_score / team_b_score</TD><TD ALIGN="LEFT">int</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">winner_id (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; teams</TD></TR>
+      <TR><TD ALIGN="LEFT">status</TD><TD ALIGN="LEFT">match_status</TD></TR>
+      <TR><TD ALIGN="LEFT">scheduled_at</TD><TD ALIGN="LEFT">timestamptz</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">next_match_id (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; matches</TD></TR>
+      <TR><TD ALIGN="LEFT">created_at</TD><TD ALIGN="LEFT">timestamptz</TD></TR>
+    </TABLE>>];
+
+  player_stats [label=<
+    <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD BGCOLOR="#2d3e50" COLSPAN="2"><FONT COLOR="white"><B>player_stats</B></FONT></TD></TR>
+      <TR><TD BGCOLOR="#fcf3cf" ALIGN="LEFT"><B>id</B> (PK)</TD><TD BGCOLOR="#fcf3cf" ALIGN="LEFT">uuid</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">match_id (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; matches</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">player_id (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; profiles</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">team_id (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; teams</TD></TR>
+      <TR><TD ALIGN="LEFT">points / goals / assists</TD><TD ALIGN="LEFT">int</TD></TR>
+      <TR><TD ALIGN="LEFT">notes</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD ALIGN="LEFT">created_at</TD><TD ALIGN="LEFT">timestamptz</TD></TR>
+    </TABLE>>];
+
+  budget_entries [label=<
+    <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD BGCOLOR="#2d3e50" COLSPAN="2"><FONT COLOR="white"><B>budget_entries</B></FONT></TD></TR>
+      <TR><TD BGCOLOR="#fcf3cf" ALIGN="LEFT"><B>id</B> (PK)</TD><TD BGCOLOR="#fcf3cf" ALIGN="LEFT">uuid</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">event_id (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; events</TD></TR>
+      <TR><TD ALIGN="LEFT">type</TD><TD ALIGN="LEFT">budget_entry_type</TD></TR>
+      <TR><TD ALIGN="LEFT">label</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD ALIGN="LEFT">amount</TD><TD ALIGN="LEFT">numeric(12,2)</TD></TR>
+      <TR><TD ALIGN="LEFT">proof_url</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">recorded_by (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; profiles</TD></TR>
+      <TR><TD ALIGN="LEFT">created_at</TD><TD ALIGN="LEFT">timestamptz</TD></TR>
+    </TABLE>>];
+
+  event_awards [label=<
+    <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD BGCOLOR="#2d3e50" COLSPAN="2"><FONT COLOR="white"><B>event_awards</B></FONT></TD></TR>
+      <TR><TD BGCOLOR="#fcf3cf" ALIGN="LEFT"><B>id</B> (PK)</TD><TD BGCOLOR="#fcf3cf" ALIGN="LEFT">uuid</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">event_id (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; events</TD></TR>
+      <TR><TD ALIGN="LEFT">category</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD ALIGN="LEFT">performer</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD ALIGN="LEFT">detail</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">created_by (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; profiles</TD></TR>
+      <TR><TD ALIGN="LEFT">created_at</TD><TD ALIGN="LEFT">timestamptz</TD></TR>
+    </TABLE>>];
+
+  audit_log [label=<
+    <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD BGCOLOR="#2d3e50" COLSPAN="2"><FONT COLOR="white"><B>audit_log</B></FONT></TD></TR>
+      <TR><TD BGCOLOR="#fcf3cf" ALIGN="LEFT"><B>id</B> (PK)</TD><TD BGCOLOR="#fcf3cf" ALIGN="LEFT">bigint identity</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">actor_id (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; profiles</TD></TR>
+      <TR><TD ALIGN="LEFT">action</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD ALIGN="LEFT">table_name</TD><TD ALIGN="LEFT">text</TD></TR>
+      <TR><TD ALIGN="LEFT">record_id</TD><TD ALIGN="LEFT">uuid</TD></TR>
+      <TR><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">event_id (FK)</TD><TD BGCOLOR="#d6eaf8" ALIGN="LEFT">uuid &rarr; events</TD></TR>
+      <TR><TD ALIGN="LEFT">old_data / new_data</TD><TD ALIGN="LEFT">jsonb</TD></TR>
+      <TR><TD ALIGN="LEFT">created_at</TD><TD ALIGN="LEFT">timestamptz</TD></TR>
+    </TABLE>>];
+
+  /* ---------- relationships (FK -> referenced) ---------- */
+  events:e          -> profiles:e   [label="created_by"];
+  events            -> profiles     [label="approved_by"];
+  event_managers    -> events       [label="event"];
+  event_managers    -> profiles     [label="user"];
+  event_managers    -> profiles     [label="assigned_by", style=dashed];
+  teams             -> events       [label="event"];
+  teams             -> profiles     [label="created_by"];
+  team_members      -> teams        [label="team"];
+  team_members      -> profiles     [label="user"];
+  team_members      -> profiles     [label="added_by", style=dashed];
+  matches           -> events       [label="event"];
+  matches           -> teams        [label="team_a"];
+  matches           -> teams        [label="team_b"];
+  matches           -> teams        [label="winner"];
+  matches:s         -> matches:s    [label="next_match", style=dashed];
+  player_stats      -> matches      [label="match"];
+  player_stats      -> profiles     [label="player"];
+  player_stats      -> teams        [label="team"];
+  budget_entries    -> events       [label="event"];
+  budget_entries    -> profiles     [label="recorded_by"];
+  event_awards      -> events       [label="event"];
+  event_awards      -> profiles     [label="created_by"];
+  audit_log         -> profiles     [label="actor", style=dashed];
+  audit_log         -> events       [label="event", style=dashed];
+}

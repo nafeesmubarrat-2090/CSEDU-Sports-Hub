@@ -10,6 +10,8 @@ create extension if not exists "uuid-ossp";
 -- ---------- Enums ----------
 create type app_role as enum ('admin', 'event_manager', 'user');
 create type event_status as enum ('pending', 'approved', 'rejected', 'completed');
+-- Real-world run state, set by the event's managers/admin (distinct from the approval workflow above).
+create type event_lifecycle as enum ('upcoming', 'ongoing', 'completed', 'cancelled');
 create type team_member_role as enum ('manager', 'player');
 create type budget_entry_type as enum ('income', 'expense');
 create type match_status as enum ('scheduled', 'in_progress', 'completed');
@@ -34,6 +36,7 @@ create table public.events (
   description text,
   sport text,
   status event_status not null default 'pending',
+  lifecycle event_lifecycle not null default 'upcoming',
   created_by uuid not null references public.profiles(id),
   approved_by uuid references public.profiles(id),
   start_date date,
@@ -262,9 +265,21 @@ create or replace function public.add_event_manager(target_event uuid, target_us
 returns void language plpgsql security definer set search_path = public as $$
 declare
   caller uuid := auth.uid();
+  ev_status event_status;
+  target_role app_role;
 begin
   if not public.is_event_manager_of(caller, target_event) then
     raise exception 'Only admins or this event''s managers can add co-managers';
+  end if;
+
+  select status into ev_status from public.events where id = target_event;
+  if ev_status is distinct from 'approved' then
+    raise exception 'Managers can only be assigned to approved events';
+  end if;
+
+  select global_role into target_role from public.profiles where id = target_user;
+  if target_role not in ('event_manager', 'admin') then
+    raise exception 'Only users with the event_manager role can be assigned to events';
   end if;
 
   insert into public.event_managers (event_id, user_id, assigned_by)
@@ -273,6 +288,46 @@ begin
 
   insert into public.audit_log (actor_id, action, table_name, record_id, event_id, new_data)
   values (caller, 'ADD_EVENT_MANAGER', 'event_managers', target_user, target_event,
+          jsonb_build_object('user_id', target_user));
+end;
+$$;
+
+-- Remove a manager from a specific event. Admin or one of the event's managers may
+-- call it. Guard: an event must always keep at least one manager, so the last
+-- remaining manager of an event cannot be removed.
+create or replace function public.remove_event_manager(target_event uuid, target_user uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  caller uuid := auth.uid();
+  is_manager boolean;
+  manager_count int;
+begin
+  if not public.is_event_manager_of(caller, target_event) then
+    raise exception 'Only admins or this event''s managers can remove co-managers';
+  end if;
+
+  select exists (
+    select 1 from public.event_managers
+    where event_id = target_event and user_id = target_user
+  ) into is_manager;
+
+  -- Nothing to remove; treat as a no-op so the guard below can't misfire.
+  if not is_manager then
+    return;
+  end if;
+
+  select count(*) into manager_count
+    from public.event_managers where event_id = target_event;
+
+  if manager_count <= 1 then
+    raise exception 'Cannot remove the last remaining manager of this event';
+  end if;
+
+  delete from public.event_managers
+    where event_id = target_event and user_id = target_user;
+
+  insert into public.audit_log (actor_id, action, table_name, record_id, event_id, new_data)
+  values (caller, 'REMOVE_EVENT_MANAGER', 'event_managers', target_user, target_event,
           jsonb_build_object('user_id', target_user));
 end;
 $$;
@@ -484,6 +539,9 @@ grant execute on function public.approve_event(uuid) to authenticated;
 revoke execute on function public.add_event_manager(uuid, uuid) from public;
 grant execute on function public.add_event_manager(uuid, uuid) to authenticated;
 
+revoke execute on function public.remove_event_manager(uuid, uuid) from public;
+grant execute on function public.remove_event_manager(uuid, uuid) to authenticated;
+
 revoke execute on function public.create_team_with_manager(uuid, text) from public;
 grant execute on function public.create_team_with_manager(uuid, text) to authenticated;
 
@@ -494,3 +552,242 @@ grant execute on function public.create_team_with_manager(uuid, text) to authent
 -- the email with your own:
 -- =========================================================================
 -- update public.profiles set global_role = 'admin' where email = 'you@example.com';
+
+-- =========================================================================
+-- BRACKET RPCs (single-elimination knockout) — see supabase/bracket.sql for the
+-- standalone paste-and-run version. Kept here so schema.sql stays authoritative.
+-- =========================================================================
+
+-- Build an empty single-elimination bracket for `team_count` teams.
+-- team_count must be a power of two between 2 and 32. WIPES all existing matches
+-- (and their player_stats, via cascade) for the event before rebuilding.
+create or replace function public.generate_bracket(target_event uuid, team_count int)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  caller uuid := auth.uid();
+  total_rounds int := 0;
+  tc int := team_count;
+  mc int := 1;              -- matches in the round currently being built (starts at the final)
+  r int;
+  m int;
+  nid uuid;
+  new_id uuid;
+  cur_ids uuid[];
+  next_ids uuid[] := '{}';  -- ids of the round one step closer to the final
+begin
+  if not public.is_event_manager_of(caller, target_event) then
+    raise exception 'Only this event''s managers or an admin can generate a bracket';
+  end if;
+
+  if team_count < 2 or team_count > 32 or (team_count & (team_count - 1)) <> 0 then
+    raise exception 'Team count must be a power of two between 2 and 32 (got %)', team_count;
+  end if;
+
+  -- how many rounds does this size need? (32 -> 5, 16 -> 4, ... 2 -> 1)
+  while tc > 1 loop
+    tc := tc / 2;
+    total_rounds := total_rounds + 1;
+  end loop;
+
+  -- clear any existing bracket for this event
+  delete from public.matches where event_id = target_event;
+
+  -- build from the final round down to round 1 so each child can point at an
+  -- already-created parent via next_match_id
+  for r in reverse total_rounds..1 loop
+    cur_ids := '{}';
+    for m in 1..mc loop
+      if r = total_rounds then
+        nid := null;                                  -- the final has no next match
+      else
+        nid := next_ids[ceil(m::numeric / 2)::int];   -- matches 1,2 -> parent 1; 3,4 -> parent 2 ...
+      end if;
+
+      insert into public.matches (event_id, round, match_number, next_match_id, status)
+      values (target_event, r, m, nid, 'scheduled')
+      returning id into new_id;
+
+      cur_ids := array_append(cur_ids, new_id);
+    end loop;
+
+    next_ids := cur_ids;
+    mc := mc * 2;
+  end loop;
+end;
+$$;
+
+-- Put a team into an empty A or B slot of a match. `slot` is 'a' or 'b'.
+create or replace function public.assign_team_to_slot(target_match uuid, slot text, team uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  caller uuid := auth.uid();
+  eid uuid;
+  m_status match_status;
+  team_event uuid;
+begin
+  select event_id, status into eid, m_status from public.matches where id = target_match;
+  if eid is null then
+    raise exception 'Match not found';
+  end if;
+  if not public.is_event_manager_of(caller, eid) then
+    raise exception 'Only this event''s managers or an admin can edit the bracket';
+  end if;
+  if m_status = 'completed' then
+    raise exception 'Cannot change teams on a completed match';
+  end if;
+
+  select event_id into team_event from public.teams where id = team;
+  if team_event is null or team_event <> eid then
+    raise exception 'That team does not belong to this event';
+  end if;
+
+  if slot = 'a' then
+    update public.matches set team_a_id = team where id = target_match;
+  elsif slot = 'b' then
+    update public.matches set team_b_id = team where id = target_match;
+  else
+    raise exception 'Slot must be "a" or "b" (got %)', slot;
+  end if;
+end;
+$$;
+
+-- Advance the current slot of `target_match` up to its parent (used by both
+-- report_match_result and promote_bye). Even match numbers land in the parent's
+-- B slot, odd numbers in the A slot.
+create or replace function public.advance_winner(target_match uuid, winner uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  parent uuid;
+  m_number int;
+begin
+  select next_match_id, match_number into parent, m_number from public.matches where id = target_match;
+  if parent is null then
+    return;   -- this was the final; nothing to advance into
+  end if;
+
+  if m_number % 2 = 1 then
+    update public.matches set team_a_id = winner where id = parent;
+  else
+    update public.matches set team_b_id = winner where id = parent;
+  end if;
+end;
+$$;
+
+-- Auto-promotion: advance a team that has no opponent (a bye) without playing.
+create or replace function public.promote_bye(target_match uuid, team uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  caller uuid := auth.uid();
+  eid uuid;
+  a uuid;
+  b uuid;
+begin
+  select event_id, team_a_id, team_b_id into eid, a, b from public.matches where id = target_match;
+  if eid is null then
+    raise exception 'Match not found';
+  end if;
+  if not public.is_event_manager_of(caller, eid) then
+    raise exception 'Only this event''s managers or an admin can promote a team';
+  end if;
+  if team is null or (team <> a and team <> b) then
+    raise exception 'The promoted team must be one of the teams in this match';
+  end if;
+
+  update public.matches
+    set winner_id = team, status = 'completed'
+    where id = target_match;
+
+  perform public.advance_winner(target_match, team);
+end;
+$$;
+
+-- Record a match result and advance the winner into the next round.
+-- score_a / score_b are optional (pass null to record a winner with no score).
+create or replace function public.report_match_result(
+  target_match uuid,
+  winner uuid,
+  score_a int default null,
+  score_b int default null
+)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  caller uuid := auth.uid();
+  eid uuid;
+  a uuid;
+  b uuid;
+begin
+  select event_id, team_a_id, team_b_id into eid, a, b from public.matches where id = target_match;
+  if eid is null then
+    raise exception 'Match not found';
+  end if;
+  if not public.is_event_manager_of(caller, eid) then
+    raise exception 'Only this event''s managers or an admin can report results';
+  end if;
+  if a is null or b is null then
+    raise exception 'Both teams must be set before reporting a result (use auto-promote for a bye)';
+  end if;
+  if winner is null or (winner <> a and winner <> b) then
+    raise exception 'The winner must be one of the two teams in this match';
+  end if;
+
+  update public.matches
+    set team_a_score = score_a,
+        team_b_score = score_b,
+        winner_id = winner,
+        status = 'completed'
+    where id = target_match;
+
+  perform public.advance_winner(target_match, winner);
+end;
+$$;
+
+-- =========================================================================
+-- Lock down execution to signed-in users (each function still re-checks the
+-- caller's manager/admin status internally).
+-- =========================================================================
+revoke execute on function public.generate_bracket(uuid, int) from public;
+grant  execute on function public.generate_bracket(uuid, int) to authenticated;
+
+revoke execute on function public.assign_team_to_slot(uuid, text, uuid) from public;
+grant  execute on function public.assign_team_to_slot(uuid, text, uuid) to authenticated;
+
+revoke execute on function public.promote_bye(uuid, uuid) from public;
+grant  execute on function public.promote_bye(uuid, uuid) to authenticated;
+
+revoke execute on function public.report_match_result(uuid, uuid, int, int) from public;
+grant  execute on function public.report_match_result(uuid, uuid, int, int) to authenticated;
+
+-- advance_winner is an internal helper — no direct client access.
+revoke execute on function public.advance_winner(uuid, uuid) from public;
+
+-- =========================================================================
+-- EVENT AWARDS — manager-curated recognitions (Top Scorer, MVP, etc.)
+-- Canonical copy of supabase/awards.sql. A category + performer name + optional
+-- detail, shown at the top of the Leaderboard page. Distinct from player_stats
+-- (the auto-computed Top Performers table): awards are the curated, editorial
+-- layer an event's managers/admin set by hand. Public read, managers/admin write.
+-- Carries event_id directly, so it reuses log_activity_with_event_id for audit.
+-- =========================================================================
+create table if not exists public.event_awards (
+  id uuid primary key default uuid_generate_v4(),
+  event_id uuid not null references public.events(id) on delete cascade,
+  category text not null,          -- e.g. "Top Scorer", "MVP", "Best Goalkeeper"
+  performer text not null,         -- free-text name of the person/team recognised
+  detail text,                     -- optional extra line, e.g. "14 goals", team name
+  created_by uuid not null references public.profiles(id),
+  created_at timestamptz not null default now()
+);
+
+alter table public.event_awards enable row level security;
+
+drop policy if exists "event_awards_select_public" on public.event_awards;
+create policy "event_awards_select_public" on public.event_awards for select using (true);
+
+drop policy if exists "event_awards_write_event_managers" on public.event_awards;
+create policy "event_awards_write_event_managers" on public.event_awards for all
+  using (public.is_event_manager_of(auth.uid(), event_id))
+  with check (public.is_event_manager_of(auth.uid(), event_id));
+
+drop trigger if exists audit_awards on public.event_awards;
+create trigger audit_awards after insert or update or delete on public.event_awards
+  for each row execute function public.log_activity_with_event_id();

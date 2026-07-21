@@ -36,20 +36,20 @@ function TeamLogo({ name, logoUrl }: { name: string; logoUrl: string | null }) {
 
 function TeamCard({ team, playerCount }: { team: TeamSummary; playerCount: number }) {
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md">
+    <article className="card card-hover group">
       <div className="flex items-start gap-4">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-slate-100 text-sm font-semibold text-slate-700">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-surface-2 font-display text-sm font-bold uppercase text-primary">
           <TeamLogo name={team.name} logoUrl={team.logo_url} />
         </div>
 
         <div className="min-w-0 flex-1">
-          <h2 className="text-lg font-semibold text-slate-950">
-            <Link href={`/events/${team.event_id}/teams/${team.id}`} className="hover:underline">
+          <h2 className="font-display text-xl font-bold uppercase tracking-tight text-text">
+            <Link href={`/events/${team.event_id}/teams/${team.id}`} className="transition group-hover:text-primary">
               {team.name}
             </Link>
           </h2>
-          <p className="mt-1 text-sm text-slate-600">
-            {playerCount} {playerCount === 1 ? 'player' : 'players'}
+          <p className="mt-1 text-sm text-muted">
+            <span className="font-mono text-text">{playerCount}</span> {playerCount === 1 ? 'player' : 'players'}
           </p>
         </div>
       </div>
@@ -100,22 +100,18 @@ export default async function EventTeamsPage({ params }: PageProps) {
     <main className="mx-auto w-full max-w-6xl px-6 py-12 sm:px-8 lg:px-10">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm text-slate-500">
-            <Link href={`/events/${eventId}`} className="hover:underline">
-              {event.name}
-            </Link>{' '}
-            / Teams
+          <p className="breadcrumb">
+            <Link href={`/events/${eventId}`}>{event.name}</Link>
+            {' / '}
+            <span className="text-text">Teams</span>
           </p>
-          <h1 className="mt-2 text-3xl font-semibold text-slate-950">Teams</h1>
-          <p className="mt-2 text-sm text-slate-600">
+          <h1 className="mt-2 page-title">Teams</h1>
+          <p className="mt-2 text-sm text-muted">
             Public team list for this event. Player counts update as rosters grow.
           </p>
         </div>
 
-        <Link
-          href={`/events/${eventId}/teams/new`}
-          className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
-        >
+        <Link href={`/events/${eventId}/teams/new`} className="btn-primary">
           Create team
         </Link>
       </div>
@@ -128,7 +124,7 @@ export default async function EventTeamsPage({ params }: PageProps) {
             ))}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-sm text-slate-600">
+          <div className="empty-state">
             No teams have been created for this event yet.
           </div>
         )}
