@@ -19,8 +19,8 @@ type PageProps = {
   }>
 }
 
-function countPlayers(teamId: string, teamMembers: TeamMemberSummary[]) {
-  return teamMembers.filter((member) => member.team_id === teamId && member.role === 'player').length
+function countPlayers(members?: { role: string }[] | null) {
+  return (members ?? []).filter((member) => member.role === 'player').length
 }
 
 function TeamLogo({ name, logoUrl }: { name: string; logoUrl: string | null }) {
@@ -65,7 +65,7 @@ export default async function EventTeamsPage({ params }: PageProps) {
     supabase.from('events').select('id, name').eq('id', eventId).maybeSingle(),
     supabase
       .from('teams')
-      .select('id, event_id, name, logo_url')
+      .select('id, event_id, name, logo_url, team_members(id, role)')
       .eq('event_id', eventId)
       .order('name', { ascending: true }),
   ])
@@ -82,19 +82,7 @@ export default async function EventTeamsPage({ params }: PageProps) {
     notFound()
   }
 
-  const teamList = (teams ?? []) as TeamSummary[]
-  const teamIds = teamList.map((team) => team.id)
-
-  const { data: teamMembers, error: membersError } =
-    teamIds.length > 0
-      ? await supabase.from('team_members').select('team_id, role').in('team_id', teamIds)
-      : { data: [] as TeamMemberSummary[], error: null }
-
-  if (membersError) {
-    throw new Error(membersError.message)
-  }
-
-  const teamMembersList = (teamMembers ?? []) as TeamMemberSummary[]
+  const teamList = teams ?? []
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-12 sm:px-8 lg:px-10">
@@ -120,7 +108,7 @@ export default async function EventTeamsPage({ params }: PageProps) {
         {teamList.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {teamList.map((team) => (
-              <TeamCard key={team.id} team={team} playerCount={countPlayers(team.id, teamMembersList)} />
+              <TeamCard key={team.id} team={team} playerCount={countPlayers(team.team_members)} />
             ))}
           </div>
         ) : (

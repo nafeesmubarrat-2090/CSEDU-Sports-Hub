@@ -34,15 +34,18 @@ export default async function DashboardPage() {
     redirect('/login')
   }
 
-  const [{ data: managedRows = [], error: managedError }, { data: memberships = [], error: membershipsError }] = await Promise.all([
+  const [
+    { data: managedData = [], error: managedError },
+    { data: membershipData = [], error: membershipsError }
+  ] = await Promise.all([
     supabase
       .from('event_managers')
-      .select('event_id')
+      .select('event_id, events(id, name, sport, status, start_date, end_date)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false }),
     supabase
       .from('team_members')
-      .select('id, team_id, role')
+      .select('id, role, team_id, teams(id, name, event_id, events(id, name, sport, status, start_date, end_date))')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false }),
   ])
@@ -55,54 +58,14 @@ export default async function DashboardPage() {
     throw new Error(membershipsError.message)
   }
 
-  const managedEventIds = Array.from(
-    new Set(((managedRows ?? []) as { event_id: string }[]).map((row) => row.event_id)),
-  )
+  const managedEventsList = (managedData ?? [])
+    .map((row: any) => row.events)
+    .filter(Boolean) as EventRow[]
 
-  const { data: managedEvents = [], error: managedEventsError } =
-    managedEventIds.length > 0
-      ? await supabase
-          .from('events')
-          .select('id, name, sport, status, start_date, end_date')
-          .in('id', managedEventIds)
-          .order('created_at', { ascending: false })
-      : { data: [] as EventRow[], error: null }
-
-  if (managedEventsError) {
-    throw new Error(managedEventsError.message)
-  }
-
-  const membershipsList = (memberships ?? []) as TeamMembershipRow[]
-  const teamIds = Array.from(new Set(membershipsList.map((membership) => membership.team_id)))
-
-  const { data: teams = [], error: teamsError } =
-    teamIds.length > 0
-      ? await supabase.from('teams').select('id, name, event_id').in('id', teamIds)
-      : { data: [] as TeamRow[], error: null }
-
-  if (teamsError) {
-    throw new Error(teamsError.message)
-  }
-
-  const teamsList = (teams ?? []) as TeamRow[]
-  const eventIds = Array.from(new Set(teamsList.map((team) => team.event_id)))
-
-  const { data: teamEvents = [], error: teamEventsError } =
-    eventIds.length > 0
-      ? await supabase
-          .from('events')
-          .select('id, name, sport, status, start_date, end_date')
-          .in('id', eventIds)
-      : { data: [] as EventRow[], error: null }
-
-  if (teamEventsError) {
-    throw new Error(teamEventsError.message)
-  }
-
-  const managedEventsList = (managedEvents ?? []) as EventRow[]
-  const teamEventsList = (teamEvents ?? []) as EventRow[]
-  const teamEventMap = new Map(teamEventsList.map((event) => [event.id, event]))
-  const teamMap = new Map(teamsList.map((team) => [team.id, team]))
+  const membershipsList = (membershipData ?? []) as TeamMembershipRow[]
+  const teamList = (membershipData ?? []).map((row: any) => row.teams).filter(Boolean)
+  const teamMap = new Map(teamList.map((t: any) => [t.id, t]))
+  const teamEventMap = new Map(teamList.map((t: any) => [t.event_id, t.events]))
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-12 sm:px-8 lg:px-10">

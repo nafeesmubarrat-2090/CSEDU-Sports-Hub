@@ -1,9 +1,9 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentSession } from '@/lib/supabase/auth'
 import ConfirmButton from '@/components/ConfirmButton'
-
-type EventSummary = { id: string; name: string }
+import RealtimeBracketListener from '@/components/RealtimeBracketListener'
 type TeamSummary = { id: string; event_id: string; name: string; logo_url: string | null }
 type MatchSummary = {
   id: string
@@ -90,12 +90,12 @@ export default async function BracketPage({ params, searchParams }: PageProps) {
   if (matchesError) throw new Error(matchesError.message)
   if (!event) notFound()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const session = await getCurrentSession()
+  const user = session?.user ?? null
+  const isAdmin = session?.isAdmin ?? false
 
-  let canManage = false
-  if (user) {
+  let canManage = isAdmin
+  if (user && !isAdmin) {
     const { data: isManager } = await supabase.rpc('is_event_manager_of', {
       uid: user.id,
       eid: eventId,
@@ -213,7 +213,10 @@ export default async function BracketPage({ params, searchParams }: PageProps) {
             {' / '}
             <span className="text-text">Bracket</span>
           </p>
-          <h1 className="mt-2 page-title">Bracket</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <h1 className="page-title">Bracket</h1>
+            <RealtimeBracketListener eventId={eventId} />
+          </div>
           <p className="mt-2 text-sm text-muted">
             Single-elimination knockout. Winners advance automatically to the next round.
           </p>

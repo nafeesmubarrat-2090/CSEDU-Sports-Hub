@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentSession } from '@/lib/supabase/auth'
 import type { Database } from '@/lib/types/database.types'
 
 type EventRow = Database['public']['Tables']['events']['Row']
@@ -61,59 +62,37 @@ export default async function EventOverviewPage({ params }: PageProps) {
   const { eventId } = await params
   const supabase = await createClient()
 
-  const { data: event, error } = await supabase
-    .from('events')
-    .select(
-      'id, name, sport, description, status, lifecycle, start_date, end_date, created_by, approved_by, created_at, updated_at'
-    )
-    .eq('id', eventId)
-    .maybeSingle()
+  const session = await getCurrentSession()
+  const user = session?.user ?? null
+  const isAdmin = session?.isAdmin ?? false
 
-  if (error) {
-    throw new Error(error.message)
+  const [
+    { data: event, error: eventError },
+    { data: teams },
+    { data: matches },
+    managerCheck
+  ] = await Promise.all([
+    supabase
+      .from('events')
+      .select('id, name, sport, description, status, lifecycle, start_date, end_date, created_by, approved_by, created_at, updated_at')
+      .eq('id', eventId)
+      .maybeSingle(),
+    supabase.from('teams').select('id, name, logo_url').eq('event_id', eventId),
+    supabase.from('matches').select('id, winner_id, next_match_id').eq('event_id', eventId),
+    user && !isAdmin
+      ? supabase.rpc('is_event_manager_of', { uid: user.id, eid: eventId })
+      : Promise.resolve({ data: false }),
+  ])
+
+  if (eventError) {
+    throw new Error(eventError.message)
   }
 
   if (!event) {
     notFound()
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  let isAdmin = false
-  let canManage = false
-
-  if (user) {
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('global_role')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    if (profileError) {
-      throw new Error(profileError.message)
-    }
-
-    isAdmin = profile?.global_role === 'admin'
-
-    const { data: isManager } = await supabase.rpc('is_event_manager_of', {
-      uid: user.id,
-      eid: eventId,
-    })
-    canManage = Boolean(isManager)
-  }
-
-  // Champion detection: the final is the match with no next_match_id. If it has a
-  // winner, the tournament is decided regardless of whether the manager flipped the
-  // lifecycle to "completed" yet.
-  const [{ data: teams }, { data: matches }] = await Promise.all([
-    supabase.from('teams').select('id, name, logo_url').eq('event_id', eventId),
-    supabase
-      .from('matches')
-      .select('id, winner_id, next_match_id')
-      .eq('event_id', eventId),
-  ])
+  const canManage = isAdmin || Boolean(managerCheck.data)
 
   const teamMap = new Map((teams ?? []).map((team) => [team.id, team]))
   const finalMatch = (matches ?? []).find((match) => match.next_match_id === null)

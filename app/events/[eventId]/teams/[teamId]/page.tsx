@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentSession } from '@/lib/supabase/auth'
 import type { Database } from '@/lib/types/database.types'
 
 type EventSummary = Pick<Database['public']['Tables']['events']['Row'], 'id' | 'name'>
@@ -44,25 +45,36 @@ export default async function TeamDashboardPage({ params, searchParams }: PagePr
   const query = (await searchParams) ?? {}
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const session = await getCurrentSession()
+  const user = session?.user ?? null
+  const currentUserIsAdmin = session?.isAdmin ?? false
 
-  const [{ data: event, error: eventError }, { data: team, error: teamError }, { data: roster, error: rosterError }] =
-    await Promise.all([
-      supabase.from('events').select('id, name').eq('id', eventId).maybeSingle(),
-      supabase
-        .from('teams')
-        .select('id, event_id, name, logo_url')
-        .eq('id', teamId)
-        .eq('event_id', eventId)
-        .maybeSingle(),
-      supabase
-        .from('team_members')
-        .select('id, team_id, user_id, role, jersey_number, position, added_by')
-        .eq('team_id', teamId)
-        .order('created_at', { ascending: true }),
-    ])
+  const [
+    { data: event, error: eventError },
+    { data: team, error: teamError },
+    { data: roster, error: rosterError },
+    { data: eventManagers = [], error: eventManagersError }
+  ] = await Promise.all([
+    supabase.from('events').select('id, name').eq('id', eventId).maybeSingle(),
+    supabase
+      .from('teams')
+      .select('id, event_id, name, logo_url')
+      .eq('id', teamId)
+      .eq('event_id', eventId)
+      .maybeSingle(),
+    supabase
+      .from('team_members')
+      .select('id, team_id, user_id, role, jersey_number, position, added_by, profiles(id, full_name, email, avatar_url, global_role, username)')
+      .eq('team_id', teamId)
+      .order('created_at', { ascending: true }),
+    user
+      ? supabase
+          .from('event_managers')
+          .select('event_id, user_id')
+          .eq('event_id', eventId)
+          .eq('user_id', user.id)
+      : Promise.resolve({ data: [] as { event_id: string; user_id: string }[], error: null }),
+  ])
 
   if (eventError) {
     throw new Error(eventError.message)
@@ -76,56 +88,28 @@ export default async function TeamDashboardPage({ params, searchParams }: PagePr
     throw new Error(rosterError.message)
   }
 
-  if (!event || !team) {
-    notFound()
-  }
-
-  const rosterRows = (roster ?? []) as TeamMemberSummary[]
-  const rosterUserIds = rosterRows.map((member) => member.user_id)
-
-  const [{ data: profiles = [], error: profilesError }, { data: currentProfile, error: currentProfileError }, { data: eventManagers = [], error: eventManagersError }] =
-    await Promise.all([
-      rosterUserIds.length > 0
-        ? supabase
-            .from('profiles')
-            .select('id, full_name, email, avatar_url, global_role, username')
-            .in('id', rosterUserIds)
-        : Promise.resolve({ data: [] as ProfileSummary[], error: null }),
-      user
-        ? supabase
-            .from('profiles')
-            .select('id, full_name, email, avatar_url, global_role, username')
-            .eq('id', user.id)
-            .maybeSingle()
-        : Promise.resolve({ data: null, error: null }),
-      user
-        ? supabase
-            .from('event_managers')
-            .select('event_id, user_id')
-            .eq('event_id', eventId)
-            .eq('user_id', user.id)
-        : Promise.resolve({ data: [], error: null }),
-    ])
-
-  if (profilesError) {
-    throw new Error(profilesError.message)
-  }
-
-  if (currentProfileError) {
-    throw new Error(currentProfileError.message)
-  }
-
   if (eventManagersError) {
     throw new Error(eventManagersError.message)
   }
 
-  const profilesList = (profiles ?? []) as ProfileSummary[]
+  if (!event || !team) {
+    notFound()
+  }
+
+  const rosterRows = (roster ?? []).map((row: any) => ({
+    id: row.id,
+    team_id: row.team_id,
+    user_id: row.user_id,
+    role: row.role,
+    jersey_number: row.jersey_number,
+    position: row.position,
+    added_by: row.added_by,
+  })) as TeamMemberSummary[]
+
   const eventManagersList = (eventManagers ?? []) as Array<Pick<Database['public']['Tables']['event_managers']['Row'], 'event_id' | 'user_id'>>
-  const profileMap = new Map(profilesList.map((profile) => [profile.id, profile]))
   const currentUserIsTeamManager = Boolean(
     user && rosterRows.some((member) => member.user_id === user.id && member.role === 'manager')
   )
-  const currentUserIsAdmin = currentProfile?.global_role === 'admin'
   const currentUserIsEventManager = eventManagersList.some((manager) => manager.user_id === user?.id)
   const canManage = currentUserIsAdmin || currentUserIsEventManager || currentUserIsTeamManager
 
@@ -229,9 +213,17 @@ export default async function TeamDashboardPage({ params, searchParams }: PagePr
   }
 
   const searchMatches = (searchResult.data ?? []) as ProfileSummary[]
-  const rosterProfileList = rosterRows.map((member) => ({
-    member,
-    profile: profileMap.get(member.user_id),
+  const rosterProfileList = (roster ?? []).map((row: any) => ({
+    member: {
+      id: row.id,
+      team_id: row.team_id,
+      user_id: row.user_id,
+      role: row.role,
+      jersey_number: row.jersey_number,
+      position: row.position,
+      added_by: row.added_by,
+    } as TeamMemberSummary,
+    profile: (row.profiles as ProfileSummary | null) ?? undefined,
   }))
   const rosterPlayerUserIdSet = new Set(rosterRows.filter((member) => member.role === 'player').map((member) => member.user_id))
 

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentSession } from '@/lib/supabase/auth'
 import type { Database } from '@/lib/types/database.types'
 import ConfirmButton from '@/components/ConfirmButton'
 
@@ -24,36 +25,22 @@ export default async function AdminPage({
   const resolvedSearchParams = await searchParams
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  const [{ data: currentProfile }] = await Promise.all([
-    user ? supabase.from('profiles').select('id, global_role').eq('id', user.id).maybeSingle() : Promise.resolve({ data: null }),
-  ])
-
-  if (currentProfile?.global_role !== 'admin') {
+  const session = await getCurrentSession()
+  if (!session?.isAdmin) {
     return redirect('/events')
   }
 
-  // pending events
+  // pending events with creator embedded in single query
   const { data: pending = [], error: pendingError } = await supabase
     .from('events')
-    .select('id, name, sport, created_by, created_at')
+    .select('id, name, sport, created_by, created_at, profiles!created_by(id, full_name)')
     .eq('status', 'pending')
     .order('created_at', { ascending: true })
 
   if (pendingError) throw new Error(pendingError.message)
 
-  const pendingRows = (pending ?? []) as EventRow[]
-  const creatorIds = Array.from(new Set(pendingRows.map((e) => e.created_by).filter(Boolean)))
-  const { data: creators = [], error: creatorsError } = creatorIds.length
-    ? await supabase.from('profiles').select('id, full_name').in('id', creatorIds)
-    : { data: [] as ProfileRow[], error: null }
-
-  if (creatorsError) throw new Error(creatorsError.message)
-
-  const creatorMap = new Map((creators ?? []).map((c: any) => [c.id, c.full_name]))
+  const pendingRows = (pending ?? []) as unknown as (EventRow & { profiles?: { id: string; full_name: string } | null })[]
+  const creatorMap = new Map(pendingRows.map((e) => [e.created_by, e.profiles?.full_name ?? 'Unknown']))
 
   // role management list (searchable)
   const q = typeof resolvedSearchParams.q === 'string' ? resolvedSearchParams.q : ''

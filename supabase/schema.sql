@@ -25,9 +25,11 @@ create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text not null,
   email text not null,
+  username text not null,
   avatar_url text,
   global_role app_role not null default 'user',
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  constraint profiles_username_format check (username ~ '^[a-z0-9_.]{3,30}$')
 );
 
 create table public.events (
@@ -495,16 +497,17 @@ create policy "player_stats_select_public" on public.player_stats for select usi
 create policy "player_stats_write_event_managers" on public.player_stats for all
   using (public.is_event_manager_of(auth.uid(), (select event_id from public.matches where id = match_id)));
 
--- budget_entries: public read for transparency. INSERT only — no update/delete policy
--- exists, so corrections must be new entries. This is deliberate, not an oversight.
+-- budget_entries: public read for transparency. Writes and deletes restricted to
+-- event managers/admin. Deletions are audited by the audit_budget trigger.
 create policy "budget_select_public" on public.budget_entries for select using (true);
 create policy "budget_write_event_managers" on public.budget_entries for insert
   with check (public.is_event_manager_of(auth.uid(), event_id));
+create policy "budget_delete_event_managers" on public.budget_entries for delete
+  using (public.is_event_manager_of(auth.uid(), event_id));
 
--- audit_log: readable by admins and that event's managers only. No insert/update/delete
+-- audit_log: readable by everyone for public transparency. No insert/update/delete
 -- policy for clients at all — rows only ever arrive via the triggers above.
-create policy "audit_log_select_managers" on public.audit_log for select
-  using (public.is_admin(auth.uid()) or (event_id is not null and public.is_event_manager_of(auth.uid(), event_id)));
+create policy "audit_log_select_public" on public.audit_log for select using (true);
 
 -- event_managers: readable by everyone; no client insert policy — rows only arrive via
 -- approve_event() / add_event_manager(), which run as security definer.
@@ -791,3 +794,27 @@ create policy "event_awards_write_event_managers" on public.event_awards for all
 drop trigger if exists audit_awards on public.event_awards;
 create trigger audit_awards after insert or update or delete on public.event_awards
   for each row execute function public.log_activity_with_event_id();
+
+-- =========================================================================
+-- Performance Indexes
+-- =========================================================================
+CREATE INDEX IF NOT EXISTS idx_events_status_start_date ON public.events (status, start_date);
+CREATE INDEX IF NOT EXISTS idx_events_created_by ON public.events (created_by);
+CREATE INDEX IF NOT EXISTS idx_events_lifecycle ON public.events (lifecycle);
+
+CREATE INDEX IF NOT EXISTS idx_event_managers_user_id ON public.event_managers (user_id);
+CREATE INDEX IF NOT EXISTS idx_event_managers_event_id ON public.event_managers (event_id);
+
+CREATE INDEX IF NOT EXISTS idx_teams_event_id ON public.teams (event_id);
+CREATE INDEX IF NOT EXISTS idx_team_members_team_id ON public.team_members (team_id);
+CREATE INDEX IF NOT EXISTS idx_team_members_user_id ON public.team_members (user_id);
+
+CREATE INDEX IF NOT EXISTS idx_matches_event_round_match ON public.matches (event_id, round, match_number);
+CREATE INDEX IF NOT EXISTS idx_matches_winner_id ON public.matches (winner_id);
+CREATE INDEX IF NOT EXISTS idx_matches_next_match_id ON public.matches (next_match_id);
+
+CREATE INDEX IF NOT EXISTS idx_budget_entries_event_id ON public.budget_entries (event_id);
+CREATE INDEX IF NOT EXISTS idx_player_stats_match_id ON public.player_stats (match_id);
+CREATE INDEX IF NOT EXISTS idx_event_awards_event_id ON public.event_awards (event_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_event_created ON public.audit_log (event_id, created_at DESC);
+

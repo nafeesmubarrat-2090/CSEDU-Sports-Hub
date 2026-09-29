@@ -17,10 +17,27 @@ type PageProps = {
   params: Promise<{ eventId: string }>
 }
 
-function formatActivity(action: string, tableName: string): string {
+function formatActivity(
+  action: string,
+  tableName: string,
+  oldData?: unknown,
+  newData?: unknown
+): string {
+  const oldObj = (oldData && typeof oldData === 'object') ? (oldData as Record<string, unknown>) : null
+  const newObj = (newData && typeof newData === 'object') ? (newData as Record<string, unknown>) : null
+
   if (action === 'INSERT' && tableName === 'team_members') return 'Added a player to the roster'
   if (action === 'DELETE' && tableName === 'team_members') return 'Removed a player from the roster'
-  if (action === 'INSERT' && tableName === 'budget_entries') return 'Recorded a budget entry'
+  if (action === 'INSERT' && tableName === 'budget_entries') {
+    const label = typeof newObj?.label === 'string' ? ` "${newObj.label}"` : ''
+    const amount = newObj?.amount != null ? ` (৳${Number(newObj.amount).toLocaleString()})` : ''
+    return `Recorded a budget entry${label}${amount}`
+  }
+  if (action === 'DELETE' && tableName === 'budget_entries') {
+    const label = typeof oldObj?.label === 'string' ? ` "${oldObj.label}"` : ''
+    const amount = oldObj?.amount != null ? ` (৳${Number(oldObj.amount).toLocaleString()})` : ''
+    return `Deleted budget entry${label}${amount}`
+  }
   if (action === 'INSERT' && tableName === 'events') return 'Created an event'
   if (action === 'UPDATE' && tableName === 'events') return 'Updated event details'
   if (action === 'APPROVE' && tableName === 'events') return 'Approved the event'
@@ -46,10 +63,6 @@ export default async function ActivityPage({ params }: PageProps) {
   const { eventId } = await params
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
   // fetch event existence and audit log
   const [{ data: event, error: eventError }, { data: audit, error: auditError }] = await Promise.all([
     supabase.from('events').select('id, name').eq('id', eventId).maybeSingle(),
@@ -64,8 +77,8 @@ export default async function ActivityPage({ params }: PageProps) {
   if (auditError) throw new Error(auditError.message)
   if (!event) return redirect('/events')
 
-  const auditRows = (audit ?? []) as unknown as AuditRow[]
-  const actorIds = Array.from(new Set(auditRows.map((r) => (r as any).actor_id).filter(Boolean)))
+  const auditRows: AuditRow[] = (audit ?? []) as unknown as AuditRow[]
+  const actorIds = Array.from(new Set(auditRows.map((r) => r.actor_id).filter((id): id is string => Boolean(id))))
 
   const { data: actors = [], error: actorsError } = actorIds.length
     ? await supabase.from('profiles').select('id, full_name').in('id', actorIds)
@@ -105,8 +118,8 @@ export default async function ActivityPage({ params }: PageProps) {
                   <div className="flex items-start gap-3">
                     <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-primary shadow-[0_0_8px_rgba(242,183,5,0.6)]" />
                     <div>
-                      <div className="text-sm font-semibold text-text">{userMap.get((row as any).actor_id ?? (row as any).actor_id)?.full_name ?? 'Unknown'}</div>
-                      <div className="mt-1 text-sm text-muted">{formatActivity(row.action, row.table_name)}</div>
+                      <div className="text-sm font-semibold text-text">{userMap.get(row.actor_id ?? '')?.full_name ?? 'Unknown'}</div>
+                      <div className="mt-1 text-sm text-muted">{formatActivity(row.action, row.table_name, row.old_data, row.new_data)}</div>
                     </div>
                   </div>
                   <div className="font-mono text-xs text-muted">{relativeTime(row.created_at)}</div>

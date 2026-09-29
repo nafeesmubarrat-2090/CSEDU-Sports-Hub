@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentSession } from '@/lib/supabase/auth'
 import type { Database } from '@/lib/types/database.types'
 
 type EventSummary = Pick<
@@ -71,9 +72,8 @@ function EventCard({ event }: { event: EventSummary }) {
 
 export default async function EventsPage() {
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const session = await getCurrentSession()
+  const user = session?.user ?? null
 
   const { data, error } = await supabase
     .from('events')

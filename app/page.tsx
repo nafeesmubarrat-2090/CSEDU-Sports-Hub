@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import GoogleSignInButton from '@/components/GoogleSignInButton'
 
 const highlights = [
   'Approve and publish events quickly',
@@ -28,7 +27,6 @@ export default function Home() {
                 <Link href="/events" className="btn-primary">
                   Explore events
                 </Link>
-                <GoogleSignInButton className="btn-secondary" label="Sign in" />
               </div>
             </div>
 

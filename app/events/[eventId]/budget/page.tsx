@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import type { Database } from '@/lib/types/database.types'
+import ConfirmButton from '@/components/ConfirmButton'
+import ExportBudgetButton from '@/components/ExportBudgetButton'
 
 type BudgetEntry = Pick<
   Database['public']['Tables']['budget_entries']['Row'],
@@ -81,7 +83,7 @@ export default async function BudgetPage({ params, searchParams }: PageProps) {
     : { data: [] }
 
   const isEventManagerList = isEventManagerRows ?? []
-  const canAdd = isAdmin || (isEventManagerList.length > 0)
+  const canManage = isAdmin || (isEventManagerList.length > 0)
 
   async function addEntry(formData: FormData) {
     'use server'
@@ -133,6 +135,34 @@ export default async function BudgetPage({ params, searchParams }: PageProps) {
     redirect(`/events/${eventId}/budget?success=entry-added`)
   }
 
+  async function deleteEntry(formData: FormData) {
+    'use server'
+
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) redirect('/login')
+
+    const entryId = String(formData.get('entryId') ?? '')
+    if (!entryId) {
+      redirect(`/events/${eventId}/budget?error=${encodeURIComponent('Missing entry ID')}`)
+    }
+
+    const { error: deleteError } = await supabase
+      .from('budget_entries')
+      .delete()
+      .eq('id', entryId)
+      .eq('event_id', eventId)
+
+    if (deleteError) {
+      redirect(`/events/${eventId}/budget?error=${encodeURIComponent(deleteError.message)}`)
+    }
+
+    redirect(`/events/${eventId}/budget?success=entry-deleted`)
+  }
+
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-12 sm:px-8 lg:px-10">
       <div className="flex items-center justify-between">
@@ -144,6 +174,19 @@ export default async function BudgetPage({ params, searchParams }: PageProps) {
           </p>
           <h1 className="mt-2 page-title">Budget ledger</h1>
         </div>
+        {entryRows.length > 0 ? (
+          <ExportBudgetButton
+            eventName={event.name}
+            entries={entryRows.map((e) => ({
+              type: e.type,
+              label: e.label,
+              amount: e.amount,
+              recorderName: recorderMap.get(e.recorded_by)?.full_name ?? e.recorded_by,
+              date: e.created_at ? new Date(e.created_at).toLocaleString() : '',
+              proofUrl: e.proof_url,
+            }))}
+          />
+        ) : null}
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -169,11 +212,11 @@ export default async function BudgetPage({ params, searchParams }: PageProps) {
 
       {query.success ? (
         <div className="mt-6 rounded-lg border border-success/40 bg-success/10 px-4 py-3 text-sm text-success">
-          Entry added successfully
+          {query.success === 'entry-deleted' ? 'Entry deleted successfully' : 'Entry added successfully'}
         </div>
       ) : null}
 
-      {canAdd ? (
+      {canManage ? (
         <section className="mt-8 card">
           <h2 className="section-title">Add entry</h2>
           <p className="mt-1 text-sm text-muted">Add an income or expense. Proof upload is optional.</p>
@@ -206,6 +249,7 @@ export default async function BudgetPage({ params, searchParams }: PageProps) {
                 <th className="px-4 py-3 font-semibold">Recorded by</th>
                 <th className="px-4 py-3 font-semibold">Date</th>
                 <th className="px-4 py-3 font-semibold">Proof</th>
+                {canManage ? <th className="px-4 py-3 font-semibold text-right">Actions</th> : null}
               </tr>
             </thead>
             <tbody className="divide-y divide-border bg-surface">
@@ -223,6 +267,19 @@ export default async function BudgetPage({ params, searchParams }: PageProps) {
                   <td className="px-4 py-4 text-muted">{recorderMap.get(entry.recorded_by)?.full_name ?? entry.recorded_by}</td>
                   <td className="px-4 py-4 font-mono text-muted">{new Date(entry.created_at ?? '').toLocaleString()}</td>
                   <td className="px-4 py-4 text-muted">{entry.proof_url ? <a href={entry.proof_url} target="_blank" rel="noreferrer" className="text-secondary hover:text-secondary-strong hover:underline">View</a> : '—'}</td>
+                  {canManage ? (
+                    <td className="px-4 py-4 text-right">
+                      <form action={deleteEntry} className="inline">
+                        <input type="hidden" name="entryId" value={entry.id} />
+                        <ConfirmButton
+                          message={`Delete budget entry "${entry.label}" (${formatCurrency(Number(entry.amount ?? 0))})? This deletion will be permanently recorded in the activity log.`}
+                          className="text-xs font-semibold text-danger hover:underline cursor-pointer"
+                        >
+                          Delete
+                        </ConfirmButton>
+                      </form>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>

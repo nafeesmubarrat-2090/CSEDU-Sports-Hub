@@ -1,31 +1,11 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
-import type { Database } from '@/lib/types/database.types'
+import { getCurrentSession } from '@/lib/supabase/auth'
 import NavbarSignOut from './NavbarSignOut'
 import GoogleSignInButton from './GoogleSignInButton'
 
-async function getSession() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    return null
-  }
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id, full_name, global_role, avatar_url')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  return { user, profile }
-}
-
 export default async function Navbar() {
-  const session = await getSession()
-  const isAdmin = session?.profile?.global_role === 'admin'
+  const session = await getCurrentSession()
+  const isAdmin = session?.isAdmin ?? false
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-bg/85 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 export default function GoogleSignInButton({
@@ -12,24 +12,63 @@ export default function GoogleSignInButton({
 }) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const timerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    function handleReturn() {
+      setIsLoading(false)
+    }
+
+    window.addEventListener('pageshow', handleReturn)
+    window.addEventListener('focus', handleReturn)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        handleReturn()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('pageshow', handleReturn)
+      window.removeEventListener('focus', handleReturn)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current)
+      }
+    }
+  }, [])
 
   async function handleGoogleSignIn() {
     setIsLoading(true)
     setError(null)
 
-    const supabase = createClient()
-    const callbackUrl = new URL('/auth/callback', window.location.origin)
-    callbackUrl.searchParams.set('next', '/dashboard')
+    if (timerRef.current) {
+      window.clearTimeout(timerRef.current)
+    }
+    timerRef.current = window.setTimeout(() => {
+      setIsLoading(false)
+    }, 6000)
 
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: callbackUrl.toString(),
-      },
-    })
+    try {
+      const supabase = createClient()
+      const callbackUrl = new URL('/auth/callback', window.location.origin)
+      callbackUrl.searchParams.set('next', '/dashboard')
 
-    if (error) {
-      setError(error.message)
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: callbackUrl.toString(),
+        },
+      })
+
+      if (error) {
+        if (timerRef.current) window.clearTimeout(timerRef.current)
+        setError(error.message)
+        setIsLoading(false)
+      }
+    } catch (err: unknown) {
+      if (timerRef.current) window.clearTimeout(timerRef.current)
+      setError(err instanceof Error ? err.message : 'Sign in failed')
       setIsLoading(false)
     }
   }
