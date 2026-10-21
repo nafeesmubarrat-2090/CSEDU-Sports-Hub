@@ -64,7 +64,7 @@ export default async function TeamDashboardPage({ params, searchParams }: PagePr
       .maybeSingle(),
     supabase
       .from('team_members')
-      .select('id, team_id, user_id, role, jersey_number, position, added_by, profiles(id, full_name, email, avatar_url, global_role, username)')
+      .select('id, team_id, user_id, role, jersey_number, position, added_by, profiles:profiles!team_members_user_id_fkey(id, full_name, email, avatar_url, global_role, username)')
       .eq('team_id', teamId)
       .order('created_at', { ascending: true }),
     user
